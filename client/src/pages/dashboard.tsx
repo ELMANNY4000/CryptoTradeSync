@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { queryClient } from "@/lib/queryClient";
 import { AccountSummary } from "@/components/dashboard/account-summary";
 import { MarketOverview } from "@/components/dashboard/market-overview";
 import { RecentActivity } from "@/components/dashboard/recent-activity";
@@ -33,9 +34,8 @@ export default function Dashboard() {
             src="https://s.tradingview.com/widgetembed/?frameElementId=tradingview_54321&symbol=BITSTAMP%3ABTCUSD&interval=D&hidesidetoolbar=0&symboledit=1&saveimage=1&toolbarbg=f1f3f6&studies=%5B%5D&theme=light&style=1&timezone=exchange&withdateranges=1&studies_overrides=%7B%7D&overrides=%7B%7D&enabled_features=%5B%5D&disabled_features=%5B%5D&locale=en&utm_source=&utm_medium=widget&utm_campaign=chart&utm_term=BITSTAMP%3ABTCUSD"
             style={{ width: "100%", height: "400px" }}
             frameBorder="0"
-            allowTransparency
             scrolling="no"
-            allowFullScreen
+            allowFullScreen={true}
           ></iframe>
         </div>
         
