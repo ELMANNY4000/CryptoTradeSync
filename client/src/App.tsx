@@ -11,6 +11,8 @@ import Admin from "@/pages/admin";
 import Login from "@/pages/auth/login";
 import Register from "@/pages/auth/register";
 import KYC from "@/pages/kyc";
+import Profile from "@/pages/profile";
+import Settings from "@/pages/settings";
 import { AuthProvider, useAuth } from "@/contexts/auth-context";
 import { ThemeProvider } from "@/contexts/theme-context";
 import { AppShell } from "@/components/layout/app-shell";
@@ -57,6 +59,8 @@ function Router() {
       <Route path="/trade" component={() => <ProtectedRoute component={Trade} />} />
       <Route path="/wallets" component={() => <ProtectedRoute component={Wallets} />} />
       <Route path="/kyc" component={() => <ProtectedRoute component={KYC} />} />
+      <Route path="/profile" component={() => <ProtectedRoute component={Profile} />} />
+      <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
       <Route path="/admin" component={() => <AdminRoute component={Admin} />} />
       <Route component={NotFound} />
     </Switch>

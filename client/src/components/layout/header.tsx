@@ -46,7 +46,7 @@ export function Header() {
       <div className="container mx-auto px-4 py-3 flex justify-between items-center">
         <div className="flex items-center">
           <Link href="/">
-            <a className="text-primary font-bold text-2xl mr-8">CryptoTrade</a>
+            <a className="text-primary font-bold text-2xl mr-8">Trade Desk</a>
           </Link>
           
           <nav className="hidden md:flex space-x-6">
