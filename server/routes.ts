@@ -10,7 +10,11 @@ import {
   insertUserSchema,
   insertKycInfoSchema,
   insertOrderSchema,
-  insertTransactionSchema
+  insertTransactionSchema,
+  users,
+  kycInfo,
+  type User,
+  type KycInfo
 } from "@shared/schema";
 
 // JWT Secret (in production this would be in environment variables)
@@ -628,7 +632,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ===== Admin Routes =====
   apiRouter.get("/admin/users", authenticate, isAdmin, async (req, res) => {
     try {
-      const users = Array.from(storage.users.values()).map(user => ({
+      // Query all users from the database
+      const { db } = await import("./db");
+      const allUsers = await db.select().from(users);
+      
+      // Filter sensitive information
+      const filteredUsers = allUsers.map(user => ({
         id: user.id,
         username: user.username,
         email: user.email,
@@ -638,7 +647,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         createdAt: user.createdAt
       }));
       
-      res.json({ users });
+      res.json({ users: filteredUsers });
     } catch (error) {
       console.error(error);
       res.status(500).json({ message: "Internal server error" });
@@ -647,8 +656,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   apiRouter.get("/admin/kyc-requests", authenticate, isAdmin, async (req, res) => {
     try {
-      const kycRequests = Array.from(storage.kycInfo.values())
-        .filter(info => info.verificationStatus === "pending");
+      // Query pending KYC requests
+      const { db } = await import("./db");
+      const { eq } = await import("drizzle-orm");
+      const kycRequests = await db.select().from(kycInfo)
+        .where(eq(kycInfo.verificationStatus, "pending"));
       
       // Enrich with user info
       const enrichedRequests = await Promise.all(
