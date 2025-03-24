@@ -476,6 +476,342 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== DEX Routes =====
+  // Get all liquidity pools
+  apiRouter.get("/dex/pools", async (req, res) => {
+    try {
+      const pools = await storage.getAllLiquidityPools();
+      
+      // Enrich with token information
+      const enrichedPools = await Promise.all(pools.map(async (pool) => {
+        const token0 = await storage.getCryptoAsset(pool.token0Id);
+        const token1 = await storage.getCryptoAsset(pool.token1Id);
+        
+        return {
+          ...pool,
+          token0: token0 || undefined,
+          token1: token1 || undefined
+        };
+      }));
+      
+      res.json({ pools: enrichedPools });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+  
+  // Get specific liquidity pool
+  apiRouter.get("/dex/pools/:id", async (req, res) => {
+    try {
+      const poolId = parseInt(req.params.id);
+      if (isNaN(poolId)) {
+        return res.status(400).json({ message: "Invalid pool ID" });
+      }
+      
+      const pool = await storage.getLiquidityPool(poolId);
+      if (!pool) {
+        return res.status(404).json({ message: "Liquidity pool not found" });
+      }
+      
+      const token0 = await storage.getCryptoAsset(pool.token0Id);
+      const token1 = await storage.getCryptoAsset(pool.token1Id);
+      
+      res.json({
+        pool: {
+          ...pool,
+          token0: token0 || undefined,
+          token1: token1 || undefined
+        }
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+  
+  // Create a new liquidity pool
+  apiRouter.post("/dex/pools", authenticate, async (req, res) => {
+    try {
+      const { token0Id, token1Id, initialLiquidity0, initialLiquidity1 } = req.body;
+      
+      if (!token0Id || !token1Id || !initialLiquidity0 || !initialLiquidity1) {
+        return res.status(400).json({ 
+          message: "Missing required fields: token0Id, token1Id, initialLiquidity0, initialLiquidity1" 
+        });
+      }
+      
+      // Check if assets exist
+      const token0 = await storage.getCryptoAsset(token0Id);
+      const token1 = await storage.getCryptoAsset(token1Id);
+      
+      if (!token0 || !token1) {
+        return res.status(404).json({ message: "One or both token assets not found" });
+      }
+      
+      // Check if pool already exists
+      const existingPool = await storage.getLiquidityPoolByTokens(token0Id, token1Id);
+      if (existingPool) {
+        return res.status(409).json({ message: "Liquidity pool already exists for these tokens" });
+      }
+      
+      // Check if user has enough tokens
+      const token0Wallet = await storage.getUserWalletForAsset(req.user!.id, token0Id);
+      const token1Wallet = await storage.getUserWalletForAsset(req.user!.id, token1Id);
+      
+      if (!token0Wallet || token0Wallet.balance < initialLiquidity0) {
+        return res.status(400).json({ message: `Insufficient ${token0.symbol} balance` });
+      }
+      
+      if (!token1Wallet || token1Wallet.balance < initialLiquidity1) {
+        return res.status(400).json({ message: `Insufficient ${token1.symbol} balance` });
+      }
+      
+      // Create the pool
+      const pool = await storage.createLiquidityPool({
+        token0Id,
+        token1Id,
+        token0Reserve: initialLiquidity0,
+        token1Reserve: initialLiquidity1,
+        fee: 0.003 // 0.3% fee
+      });
+      
+      // Create a liquidity position for the user
+      const sqrtLiquidity = Math.sqrt(initialLiquidity0 * initialLiquidity1);
+      const position = await storage.createLiquidityPosition({
+        userId: req.user!.id,
+        poolId: pool.id,
+        liquidity: sqrtLiquidity
+      });
+      
+      // Update user wallets
+      await storage.updateWallet(token0Wallet.id, {
+        balance: token0Wallet.balance - initialLiquidity0
+      });
+      
+      await storage.updateWallet(token1Wallet.id, {
+        balance: token1Wallet.balance - initialLiquidity1
+      });
+      
+      res.status(201).json({
+        message: "Liquidity pool created successfully",
+        pool,
+        position
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+  
+  // Add liquidity to a pool
+  apiRouter.post("/dex/pools/:id/liquidity", authenticate, async (req, res) => {
+    try {
+      const poolId = parseInt(req.params.id);
+      if (isNaN(poolId)) {
+        return res.status(400).json({ message: "Invalid pool ID" });
+      }
+      
+      const { amount0, amount1 } = req.body;
+      
+      if (!amount0 || !amount1) {
+        return res.status(400).json({ message: "Missing required fields: amount0, amount1" });
+      }
+      
+      // Get the pool
+      const pool = await storage.getLiquidityPool(poolId);
+      if (!pool) {
+        return res.status(404).json({ message: "Liquidity pool not found" });
+      }
+      
+      // Check if the ratio is correct
+      const currentRatio = pool.token0Reserve / pool.token1Reserve;
+      const providedRatio = amount0 / amount1;
+      
+      // Allow 1% slippage
+      const slippage = 0.01;
+      if (Math.abs(currentRatio - providedRatio) / currentRatio > slippage) {
+        return res.status(400).json({ 
+          message: "Liquidity ratio does not match the pool ratio",
+          expectedRatio: currentRatio,
+          providedRatio 
+        });
+      }
+      
+      // Check if user has enough tokens
+      const token0Wallet = await storage.getUserWalletForAsset(req.user!.id, pool.token0Id);
+      const token1Wallet = await storage.getUserWalletForAsset(req.user!.id, pool.token1Id);
+      
+      if (!token0Wallet || token0Wallet.balance < amount0) {
+        return res.status(400).json({ message: "Insufficient token0 balance" });
+      }
+      
+      if (!token1Wallet || token1Wallet.balance < amount1) {
+        return res.status(400).json({ message: "Insufficient token1 balance" });
+      }
+      
+      // Get user's existing position or create a new one
+      let position = await storage.getUserLiquidityPositionForPool(req.user!.id, poolId);
+      
+      const newLiquidity = Math.sqrt(amount0 * amount1);
+      
+      if (position) {
+        position = await storage.updateLiquidityPosition(position.id, {
+          liquidity: position.liquidity + newLiquidity
+        });
+      } else {
+        position = await storage.createLiquidityPosition({
+          userId: req.user!.id,
+          poolId: pool.id,
+          liquidity: newLiquidity
+        });
+      }
+      
+      // Update pool reserves
+      const updatedPool = await storage.updateLiquidityPool(poolId, {
+        token0Reserve: pool.token0Reserve + amount0,
+        token1Reserve: pool.token1Reserve + amount1,
+        totalLiquidity: pool.totalLiquidity + newLiquidity
+      });
+      
+      // Update user wallets
+      await storage.updateWallet(token0Wallet.id, {
+        balance: token0Wallet.balance - amount0
+      });
+      
+      await storage.updateWallet(token1Wallet.id, {
+        balance: token1Wallet.balance - amount1
+      });
+      
+      res.status(200).json({
+        message: "Liquidity added successfully",
+        pool: updatedPool,
+        position
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+  
+  // Perform a swap
+  apiRouter.post("/dex/swap", authenticate, async (req, res) => {
+    try {
+      const { poolId, tokenInId, tokenOutId, amountIn } = req.body;
+      
+      if (!poolId || !tokenInId || !tokenOutId || !amountIn) {
+        return res.status(400).json({ 
+          message: "Missing required fields: poolId, tokenInId, tokenOutId, amountIn" 
+        });
+      }
+      
+      // Get the pool
+      const pool = await storage.getLiquidityPool(poolId);
+      if (!pool) {
+        return res.status(404).json({ message: "Liquidity pool not found" });
+      }
+      
+      // Validate tokens are in the pool
+      if (!((pool.token0Id === tokenInId && pool.token1Id === tokenOutId) || 
+            (pool.token0Id === tokenOutId && pool.token1Id === tokenInId))) {
+        return res.status(400).json({ message: "Token pair does not match pool" });
+      }
+      
+      // Check if user has enough tokens
+      const tokenInWallet = await storage.getUserWalletForAsset(req.user!.id, tokenInId);
+      
+      if (!tokenInWallet || tokenInWallet.balance < amountIn) {
+        return res.status(400).json({ message: "Insufficient balance for swap" });
+      }
+      
+      // Calculate amounts (using constant product formula: x * y = k)
+      let tokenInReserve, tokenOutReserve;
+      
+      if (tokenInId === pool.token0Id) {
+        tokenInReserve = pool.token0Reserve;
+        tokenOutReserve = pool.token1Reserve;
+      } else {
+        tokenInReserve = pool.token1Reserve;
+        tokenOutReserve = pool.token0Reserve;
+      }
+      
+      // Calculate amount out (with 0.3% fee)
+      const fee = pool.fee;
+      const amountInWithFee = amountIn * (1 - fee);
+      const constantProduct = tokenInReserve * tokenOutReserve;
+      const newTokenInReserve = tokenInReserve + amountInWithFee;
+      const newTokenOutReserve = constantProduct / newTokenInReserve;
+      const amountOut = tokenOutReserve - newTokenOutReserve;
+      
+      // Calculate price impact
+      const priceImpact = 1 - ((tokenInReserve / tokenOutReserve) * (newTokenOutReserve / newTokenInReserve));
+      
+      // Check for minimum amount out (to prevent sandwich attacks)
+      if (amountOut <= 0) {
+        return res.status(400).json({ message: "Swap would result in zero output" });
+      }
+      
+      // Update pool reserves
+      let updatedPool;
+      if (tokenInId === pool.token0Id) {
+        updatedPool = await storage.updateLiquidityPool(poolId, {
+          token0Reserve: pool.token0Reserve + amountIn,
+          token1Reserve: pool.token1Reserve - amountOut
+        });
+      } else {
+        updatedPool = await storage.updateLiquidityPool(poolId, {
+          token0Reserve: pool.token0Reserve - amountOut,
+          token1Reserve: pool.token1Reserve + amountIn
+        });
+      }
+      
+      // Create swap record
+      const swap = await storage.createSwap({
+        userId: req.user!.id,
+        poolId,
+        tokenInId,
+        tokenOutId,
+        amountIn,
+        amountOut,
+        fee: amountIn * fee,
+        priceImpact,
+        txHash: `tx-${Date.now()}-${Math.floor(Math.random() * 1000000)}`
+      });
+      
+      // Update user wallets
+      await storage.updateWallet(tokenInWallet.id, {
+        balance: tokenInWallet.balance - amountIn
+      });
+      
+      // Get or create output token wallet
+      let tokenOutWallet = await storage.getUserWalletForAsset(req.user!.id, tokenOutId);
+      
+      if (!tokenOutWallet) {
+        tokenOutWallet = await storage.createWallet({
+          userId: req.user!.id,
+          assetId: tokenOutId,
+          balance: 0,
+          address: `wallet-${req.user!.id}-${tokenOutId}`
+        });
+      }
+      
+      await storage.updateWallet(tokenOutWallet.id, {
+        balance: tokenOutWallet.balance + amountOut
+      });
+      
+      res.status(200).json({
+        message: "Swap executed successfully",
+        swap,
+        amountOut,
+        priceImpact,
+        pool: updatedPool
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+  
   // ===== Order Routes =====
   apiRouter.get("/orders", authenticate, async (req, res) => {
     try {

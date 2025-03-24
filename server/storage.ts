@@ -376,6 +376,127 @@ export class MemStorage implements IStorage {
     this.orders.set(id, updatedOrder);
     return updatedOrder;
   }
+
+  // DEX - Liquidity Pool operations
+  async getAllLiquidityPools(): Promise<LiquidityPool[]> {
+    return Array.from(this.liquidityPools.values());
+  }
+  
+  async getLiquidityPool(id: number): Promise<LiquidityPool | undefined> {
+    return this.liquidityPools.get(id);
+  }
+  
+  async getLiquidityPoolByTokens(token0Id: number, token1Id: number): Promise<LiquidityPool | undefined> {
+    return Array.from(this.liquidityPools.values()).find(
+      pool => (pool.token0Id === token0Id && pool.token1Id === token1Id) || 
+              (pool.token0Id === token1Id && pool.token1Id === token0Id)
+    );
+  }
+  
+  async createLiquidityPool(insertPool: InsertLiquidityPool): Promise<LiquidityPool> {
+    const id = this.currentLiquidityPoolId++;
+    const now = new Date();
+    const pool: LiquidityPool = { 
+      ...insertPool, 
+      id, 
+      totalLiquidity: 0,
+      createdAt: now,
+      lastUpdated: now
+    };
+    this.liquidityPools.set(id, pool);
+    return pool;
+  }
+  
+  async updateLiquidityPool(id: number, data: Partial<LiquidityPool>): Promise<LiquidityPool | undefined> {
+    const pool = await this.getLiquidityPool(id);
+    if (!pool) return undefined;
+    
+    const now = new Date();
+    const updatedPool = { 
+      ...pool, 
+      ...data,
+      lastUpdated: now
+    };
+    this.liquidityPools.set(id, updatedPool);
+    return updatedPool;
+  }
+  
+  // DEX - Liquidity Position operations
+  async getLiquidityPositionsByUserId(userId: number): Promise<LiquidityPosition[]> {
+    return Array.from(this.liquidityPositions.values())
+      .filter(position => position.userId === userId);
+  }
+  
+  async getLiquidityPositionsByPoolId(poolId: number): Promise<LiquidityPosition[]> {
+    return Array.from(this.liquidityPositions.values())
+      .filter(position => position.poolId === poolId);
+  }
+  
+  async getLiquidityPosition(id: number): Promise<LiquidityPosition | undefined> {
+    return this.liquidityPositions.get(id);
+  }
+  
+  async getUserLiquidityPositionForPool(userId: number, poolId: number): Promise<LiquidityPosition | undefined> {
+    return Array.from(this.liquidityPositions.values()).find(
+      position => position.userId === userId && position.poolId === poolId
+    );
+  }
+  
+  async createLiquidityPosition(insertPosition: InsertLiquidityPosition): Promise<LiquidityPosition> {
+    const id = this.currentLiquidityPositionId++;
+    const now = new Date();
+    const position: LiquidityPosition = { 
+      ...insertPosition, 
+      id, 
+      createdAt: now,
+      lastUpdated: now
+    };
+    this.liquidityPositions.set(id, position);
+    return position;
+  }
+  
+  async updateLiquidityPosition(id: number, data: Partial<LiquidityPosition>): Promise<LiquidityPosition | undefined> {
+    const position = await this.getLiquidityPosition(id);
+    if (!position) return undefined;
+    
+    const now = new Date();
+    const updatedPosition = { 
+      ...position, 
+      ...data,
+      lastUpdated: now
+    };
+    this.liquidityPositions.set(id, updatedPosition);
+    return updatedPosition;
+  }
+  
+  // DEX - Swap operations
+  async getSwapsByUserId(userId: number): Promise<Swap[]> {
+    return Array.from(this.swaps.values())
+      .filter(swap => swap.userId === userId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+  
+  async getSwapsByPoolId(poolId: number): Promise<Swap[]> {
+    return Array.from(this.swaps.values())
+      .filter(swap => swap.poolId === poolId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+  
+  async getSwap(id: number): Promise<Swap | undefined> {
+    return this.swaps.get(id);
+  }
+  
+  async createSwap(insertSwap: InsertSwap): Promise<Swap> {
+    const id = this.currentSwapId++;
+    const now = new Date();
+    const swap: Swap = { 
+      ...insertSwap, 
+      id, 
+      createdAt: now
+    };
+    this.swaps.set(id, swap);
+    return swap;
+  }
 }
 
 // Database implementation of the storage interface
@@ -650,6 +771,153 @@ export class DatabaseStorage implements IStorage {
       .where(eq(orders.id, id))
       .returning();
     return updatedOrder || undefined;
+  }
+  
+  // DEX - Liquidity Pool operations
+  async getAllLiquidityPools(): Promise<LiquidityPool[]> {
+    const { db } = await import("./db");
+    return await db.select().from(liquidityPools);
+  }
+  
+  async getLiquidityPool(id: number): Promise<LiquidityPool | undefined> {
+    const { eq } = await import("drizzle-orm");
+    const { db } = await import("./db");
+    const [pool] = await db.select().from(liquidityPools).where(eq(liquidityPools.id, id));
+    return pool || undefined;
+  }
+  
+  async getLiquidityPoolByTokens(token0Id: number, token1Id: number): Promise<LiquidityPool | undefined> {
+    const { or, and, eq } = await import("drizzle-orm");
+    const { db } = await import("./db");
+    const [pool] = await db.select().from(liquidityPools).where(
+      or(
+        and(
+          eq(liquidityPools.token0Id, token0Id),
+          eq(liquidityPools.token1Id, token1Id)
+        ),
+        and(
+          eq(liquidityPools.token0Id, token1Id),
+          eq(liquidityPools.token1Id, token0Id)
+        )
+      )
+    );
+    return pool || undefined;
+  }
+  
+  async createLiquidityPool(insertPool: InsertLiquidityPool): Promise<LiquidityPool> {
+    const { db } = await import("./db");
+    const now = new Date();
+    const [pool] = await db.insert(liquidityPools).values({
+      ...insertPool,
+      totalLiquidity: 0,
+      createdAt: now,
+      lastUpdated: now
+    }).returning();
+    return pool;
+  }
+  
+  async updateLiquidityPool(id: number, data: Partial<LiquidityPool>): Promise<LiquidityPool | undefined> {
+    const { eq } = await import("drizzle-orm");
+    const { db } = await import("./db");
+    const now = new Date();
+    const [updatedPool] = await db.update(liquidityPools)
+      .set({
+        ...data,
+        lastUpdated: now
+      })
+      .where(eq(liquidityPools.id, id))
+      .returning();
+    return updatedPool || undefined;
+  }
+  
+  // DEX - Liquidity Position operations
+  async getLiquidityPositionsByUserId(userId: number): Promise<LiquidityPosition[]> {
+    const { eq } = await import("drizzle-orm");
+    const { db } = await import("./db");
+    return await db.select().from(liquidityPositions).where(eq(liquidityPositions.userId, userId));
+  }
+  
+  async getLiquidityPositionsByPoolId(poolId: number): Promise<LiquidityPosition[]> {
+    const { eq } = await import("drizzle-orm");
+    const { db } = await import("./db");
+    return await db.select().from(liquidityPositions).where(eq(liquidityPositions.poolId, poolId));
+  }
+  
+  async getLiquidityPosition(id: number): Promise<LiquidityPosition | undefined> {
+    const { eq } = await import("drizzle-orm");
+    const { db } = await import("./db");
+    const [position] = await db.select().from(liquidityPositions).where(eq(liquidityPositions.id, id));
+    return position || undefined;
+  }
+  
+  async getUserLiquidityPositionForPool(userId: number, poolId: number): Promise<LiquidityPosition | undefined> {
+    const { and, eq } = await import("drizzle-orm");
+    const { db } = await import("./db");
+    const [position] = await db.select().from(liquidityPositions)
+      .where(and(
+        eq(liquidityPositions.userId, userId),
+        eq(liquidityPositions.poolId, poolId)
+      ));
+    return position || undefined;
+  }
+  
+  async createLiquidityPosition(insertPosition: InsertLiquidityPosition): Promise<LiquidityPosition> {
+    const { db } = await import("./db");
+    const now = new Date();
+    const [position] = await db.insert(liquidityPositions).values({
+      ...insertPosition,
+      createdAt: now,
+      lastUpdated: now
+    }).returning();
+    return position;
+  }
+  
+  async updateLiquidityPosition(id: number, data: Partial<LiquidityPosition>): Promise<LiquidityPosition | undefined> {
+    const { eq } = await import("drizzle-orm");
+    const { db } = await import("./db");
+    const now = new Date();
+    const [updatedPosition] = await db.update(liquidityPositions)
+      .set({
+        ...data,
+        lastUpdated: now
+      })
+      .where(eq(liquidityPositions.id, id))
+      .returning();
+    return updatedPosition || undefined;
+  }
+  
+  // DEX - Swap operations
+  async getSwapsByUserId(userId: number): Promise<Swap[]> {
+    const { eq, desc } = await import("drizzle-orm");
+    const { db } = await import("./db");
+    return await db.select().from(swaps)
+      .where(eq(swaps.userId, userId))
+      .orderBy(desc(swaps.createdAt));
+  }
+  
+  async getSwapsByPoolId(poolId: number): Promise<Swap[]> {
+    const { eq, desc } = await import("drizzle-orm");
+    const { db } = await import("./db");
+    return await db.select().from(swaps)
+      .where(eq(swaps.poolId, poolId))
+      .orderBy(desc(swaps.createdAt));
+  }
+  
+  async getSwap(id: number): Promise<Swap | undefined> {
+    const { eq } = await import("drizzle-orm");
+    const { db } = await import("./db");
+    const [swap] = await db.select().from(swaps).where(eq(swaps.id, id));
+    return swap || undefined;
+  }
+  
+  async createSwap(insertSwap: InsertSwap): Promise<Swap> {
+    const { db } = await import("./db");
+    const now = new Date();
+    const [swap] = await db.insert(swaps).values({
+      ...insertSwap,
+      createdAt: now
+    }).returning();
+    return swap;
   }
   
   // Initialize the database with sample assets if needed
