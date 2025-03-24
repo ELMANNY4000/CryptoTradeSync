@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, timestamp, boolean, doublePrecision, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, timestamp, boolean, doublePrecision, jsonb, primaryKey } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -155,3 +155,76 @@ export type Transaction = typeof transactions.$inferSelect;
 
 export type InsertOrder = z.infer<typeof insertOrderSchema>;
 export type Order = typeof orders.$inferSelect;
+
+// DEX-specific tables
+export const liquidityPools = pgTable("liquidity_pools", {
+  id: serial("id").primaryKey(),
+  token0Id: integer("token0_id").notNull().references(() => cryptoAssets.id),
+  token1Id: integer("token1_id").notNull().references(() => cryptoAssets.id),
+  token0Reserve: doublePrecision("token0_reserve").default(0).notNull(),
+  token1Reserve: doublePrecision("token1_reserve").default(0).notNull(),
+  fee: doublePrecision("fee").default(0.003).notNull(), // Default 0.3% fee
+  totalLiquidity: doublePrecision("total_liquidity").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  lastUpdated: timestamp("last_updated").defaultNow().notNull(),
+});
+
+export const liquidityPositions = pgTable("liquidity_positions", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  poolId: integer("pool_id").notNull().references(() => liquidityPools.id),
+  liquidity: doublePrecision("liquidity").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  lastUpdated: timestamp("last_updated").defaultNow().notNull(),
+});
+
+export const swaps = pgTable("swaps", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  poolId: integer("pool_id").notNull().references(() => liquidityPools.id),
+  tokenInId: integer("token_in_id").notNull().references(() => cryptoAssets.id),
+  tokenOutId: integer("token_out_id").notNull().references(() => cryptoAssets.id),
+  amountIn: doublePrecision("amount_in").notNull(),
+  amountOut: doublePrecision("amount_out").notNull(),
+  fee: doublePrecision("fee").notNull(),
+  priceImpact: doublePrecision("price_impact"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  txHash: text("tx_hash"), // For blockchain compatibility
+});
+
+// Define schemas for inserts
+export const insertLiquidityPoolSchema = createInsertSchema(liquidityPools).pick({
+  token0Id: true,
+  token1Id: true,
+  token0Reserve: true,
+  token1Reserve: true,
+  fee: true,
+});
+
+export const insertLiquidityPositionSchema = createInsertSchema(liquidityPositions).pick({
+  userId: true,
+  poolId: true,
+  liquidity: true,
+});
+
+export const insertSwapSchema = createInsertSchema(swaps).pick({
+  userId: true,
+  poolId: true,
+  tokenInId: true,
+  tokenOutId: true,
+  amountIn: true,
+  amountOut: true,
+  fee: true,
+  priceImpact: true,
+  txHash: true,
+});
+
+// Export types for DEX
+export type InsertLiquidityPool = z.infer<typeof insertLiquidityPoolSchema>;
+export type LiquidityPool = typeof liquidityPools.$inferSelect;
+
+export type InsertLiquidityPosition = z.infer<typeof insertLiquidityPositionSchema>;
+export type LiquidityPosition = typeof liquidityPositions.$inferSelect;
+
+export type InsertSwap = z.infer<typeof insertSwapSchema>;
+export type Swap = typeof swaps.$inferSelect;

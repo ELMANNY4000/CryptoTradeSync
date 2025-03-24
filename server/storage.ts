@@ -4,7 +4,10 @@ import {
   cryptoAssets, type CryptoAsset, type InsertCryptoAsset,
   wallets, type Wallet, type InsertWallet,
   transactions, type Transaction, type InsertTransaction,
-  orders, type Order, type InsertOrder
+  orders, type Order, type InsertOrder,
+  liquidityPools, type LiquidityPool, type InsertLiquidityPool,
+  liquidityPositions, type LiquidityPosition, type InsertLiquidityPosition,
+  swaps, type Swap, type InsertSwap
 } from "@shared/schema";
 
 // Storage interface for all data operations
@@ -46,6 +49,27 @@ export interface IStorage {
   getOrder(id: number): Promise<Order | undefined>;
   createOrder(order: InsertOrder): Promise<Order>;
   updateOrder(id: number, data: Partial<Order>): Promise<Order | undefined>;
+  
+  // DEX - Liquidity Pool operations
+  getAllLiquidityPools(): Promise<LiquidityPool[]>;
+  getLiquidityPool(id: number): Promise<LiquidityPool | undefined>;
+  getLiquidityPoolByTokens(token0Id: number, token1Id: number): Promise<LiquidityPool | undefined>;
+  createLiquidityPool(pool: InsertLiquidityPool): Promise<LiquidityPool>;
+  updateLiquidityPool(id: number, data: Partial<LiquidityPool>): Promise<LiquidityPool | undefined>;
+  
+  // DEX - Liquidity Position operations
+  getLiquidityPositionsByUserId(userId: number): Promise<LiquidityPosition[]>;
+  getLiquidityPositionsByPoolId(poolId: number): Promise<LiquidityPosition[]>;
+  getLiquidityPosition(id: number): Promise<LiquidityPosition | undefined>;
+  getUserLiquidityPositionForPool(userId: number, poolId: number): Promise<LiquidityPosition | undefined>;
+  createLiquidityPosition(position: InsertLiquidityPosition): Promise<LiquidityPosition>;
+  updateLiquidityPosition(id: number, data: Partial<LiquidityPosition>): Promise<LiquidityPosition | undefined>;
+  
+  // DEX - Swap operations
+  getSwapsByUserId(userId: number): Promise<Swap[]>;
+  getSwapsByPoolId(poolId: number): Promise<Swap[]>;
+  getSwap(id: number): Promise<Swap | undefined>;
+  createSwap(swap: InsertSwap): Promise<Swap>;
 }
 
 // In-memory implementation of the storage interface
@@ -56,6 +80,9 @@ export class MemStorage implements IStorage {
   private wallets: Map<number, Wallet>;
   private transactions: Map<number, Transaction>;
   private orders: Map<number, Order>;
+  private liquidityPools: Map<number, LiquidityPool>;
+  private liquidityPositions: Map<number, LiquidityPosition>;
+  private swaps: Map<number, Swap>;
   
   private currentUserId: number;
   private currentKycId: number;
@@ -63,6 +90,9 @@ export class MemStorage implements IStorage {
   private currentWalletId: number;
   private currentTransactionId: number;
   private currentOrderId: number;
+  private currentLiquidityPoolId: number;
+  private currentLiquidityPositionId: number;
+  private currentSwapId: number;
   
   constructor() {
     this.users = new Map();
@@ -71,6 +101,9 @@ export class MemStorage implements IStorage {
     this.wallets = new Map();
     this.transactions = new Map();
     this.orders = new Map();
+    this.liquidityPools = new Map();
+    this.liquidityPositions = new Map();
+    this.swaps = new Map();
     
     this.currentUserId = 1;
     this.currentKycId = 1;
@@ -78,6 +111,9 @@ export class MemStorage implements IStorage {
     this.currentWalletId = 1;
     this.currentTransactionId = 1;
     this.currentOrderId = 1;
+    this.currentLiquidityPoolId = 1;
+    this.currentLiquidityPositionId = 1;
+    this.currentSwapId = 1;
     
     // Initialize with some crypto assets
     this.initializeCryptoAssets();
