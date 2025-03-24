@@ -7,7 +7,8 @@ import {
   orders, type Order, type InsertOrder,
   liquidityPools, type LiquidityPool, type InsertLiquidityPool,
   liquidityPositions, type LiquidityPosition, type InsertLiquidityPosition,
-  swaps, type Swap, type InsertSwap
+  swaps, type Swap, type InsertSwap,
+  userSettings, type UserSettings, type InsertUserSettings
 } from "@shared/schema";
 
 // Storage interface for all data operations
@@ -70,6 +71,11 @@ export interface IStorage {
   getSwapsByPoolId(poolId: number): Promise<Swap[]>;
   getSwap(id: number): Promise<Swap | undefined>;
   createSwap(swap: InsertSwap): Promise<Swap>;
+  
+  // User Settings operations
+  getUserSettings(userId: number): Promise<UserSettings | undefined>;
+  createUserSettings(settings: InsertUserSettings): Promise<UserSettings>;
+  updateUserSettings(userId: number, data: Partial<UserSettings>): Promise<UserSettings | undefined>;
 }
 
 // In-memory implementation of the storage interface
@@ -83,6 +89,7 @@ export class MemStorage implements IStorage {
   private liquidityPools: Map<number, LiquidityPool>;
   private liquidityPositions: Map<number, LiquidityPosition>;
   private swaps: Map<number, Swap>;
+  private userSettings: Map<number, UserSettings>;
   
   private currentUserId: number;
   private currentKycId: number;
@@ -93,6 +100,7 @@ export class MemStorage implements IStorage {
   private currentLiquidityPoolId: number;
   private currentLiquidityPositionId: number;
   private currentSwapId: number;
+  private currentUserSettingsId: number;
   
   constructor() {
     this.users = new Map();
@@ -104,6 +112,7 @@ export class MemStorage implements IStorage {
     this.liquidityPools = new Map();
     this.liquidityPositions = new Map();
     this.swaps = new Map();
+    this.userSettings = new Map();
     
     this.currentUserId = 1;
     this.currentKycId = 1;
@@ -114,6 +123,7 @@ export class MemStorage implements IStorage {
     this.currentLiquidityPoolId = 1;
     this.currentLiquidityPositionId = 1;
     this.currentSwapId = 1;
+    this.currentUserSettingsId = 1;
     
     // Initialize with some crypto assets
     this.initializeCryptoAssets();
@@ -496,6 +506,39 @@ export class MemStorage implements IStorage {
     };
     this.swaps.set(id, swap);
     return swap;
+  }
+  
+  // User Settings operations
+  async getUserSettings(userId: number): Promise<UserSettings | undefined> {
+    return Array.from(this.userSettings.values()).find(
+      settings => settings.userId === userId
+    );
+  }
+  
+  async createUserSettings(insertSettings: InsertUserSettings): Promise<UserSettings> {
+    const id = this.currentUserSettingsId++;
+    const now = new Date();
+    const settings: UserSettings = {
+      ...insertSettings,
+      id,
+      updatedAt: now
+    };
+    this.userSettings.set(id, settings);
+    return settings;
+  }
+  
+  async updateUserSettings(userId: number, data: Partial<UserSettings>): Promise<UserSettings | undefined> {
+    const settings = await this.getUserSettings(userId);
+    if (!settings) return undefined;
+    
+    const now = new Date();
+    const updatedSettings = {
+      ...settings,
+      ...data,
+      updatedAt: now
+    };
+    this.userSettings.set(settings.id, updatedSettings);
+    return updatedSettings;
   }
 }
 
