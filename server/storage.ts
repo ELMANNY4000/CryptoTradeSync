@@ -216,6 +216,23 @@ export class MemStorage implements IStorage {
       });
     }
     
+    // Create default user settings
+    await this.createUserSettings({
+      userId: id,
+      defaultCurrency: "USD",
+      language: "en",
+      timeZone: "UTC",
+      dateFormat: "MM/DD/YYYY",
+      slippageTolerance: 0.5,
+      autoConfirmTransactions: true,
+      gasPreference: "standard",
+      emailNotifications: true,
+      priceAlerts: true,
+      tradingUpdates: true,
+      securityAlerts: true,
+      marketingEmails: false
+    });
+    
     return user;
   }
   
@@ -605,6 +622,23 @@ export class DatabaseStorage implements IStorage {
       });
     }
     
+    // Create default user settings
+    await this.createUserSettings({
+      userId: user.id,
+      defaultCurrency: "USD",
+      language: "en",
+      timeZone: "UTC",
+      dateFormat: "MM/DD/YYYY",
+      slippageTolerance: 0.5,
+      autoConfirmTransactions: true,
+      gasPreference: "standard",
+      emailNotifications: true,
+      priceAlerts: true,
+      tradingUpdates: true,
+      securityAlerts: true,
+      marketingEmails: false
+    });
+    
     return user;
   }
   
@@ -961,6 +995,42 @@ export class DatabaseStorage implements IStorage {
       createdAt: now
     }).returning();
     return swap;
+  }
+  
+  // User Settings operations
+  async getUserSettings(userId: number): Promise<UserSettings | undefined> {
+    const { eq } = await import("drizzle-orm");
+    const { db } = await import("./db");
+    const [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, userId));
+    return settings || undefined;
+  }
+  
+  async createUserSettings(insertSettings: InsertUserSettings): Promise<UserSettings> {
+    const { db } = await import("./db");
+    const now = new Date();
+    const [settings] = await db.insert(userSettings).values({
+      ...insertSettings,
+      updatedAt: now
+    }).returning();
+    return settings;
+  }
+  
+  async updateUserSettings(userId: number, data: Partial<UserSettings>): Promise<UserSettings | undefined> {
+    const { eq } = await import("drizzle-orm");
+    const { db } = await import("./db");
+    
+    const settings = await this.getUserSettings(userId);
+    if (!settings) return undefined;
+    
+    const now = new Date();
+    const [updatedSettings] = await db.update(userSettings)
+      .set({
+        ...data,
+        updatedAt: now
+      })
+      .where(eq(userSettings.id, settings.id))
+      .returning();
+    return updatedSettings || undefined;
   }
   
   // Initialize the database with sample assets if needed

@@ -13,8 +13,10 @@ import {
   insertTransactionSchema,
   users,
   kycInfo,
+  userSettings,
   type User,
-  type KycInfo
+  type KycInfo,
+  type UserSettings
 } from "@shared/schema";
 
 // JWT Secret (in production this would be in environment variables)
