@@ -199,6 +199,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update user profile
+  apiRouter.patch("/auth/profile", authenticate, async (req, res) => {
+    try {
+      const { fullName, email, username } = req.body;
+      
+      if (email) {
+        // Check if email is already taken by another user
+        const existingUser = await storage.getUserByEmail(email);
+        if (existingUser && existingUser.id !== req.user!.id) {
+          return res.status(400).json({ message: "Email already in use" });
+        }
+      }
+      
+      if (username) {
+        // Check if username is already taken by another user
+        const existingUser = await storage.getUserByUsername(username);
+        if (existingUser && existingUser.id !== req.user!.id) {
+          return res.status(400).json({ message: "Username already in use" });
+        }
+      }
+      
+      // Update the user
+      const updatedUser = await storage.updateUser(req.user!.id, {
+        fullName,
+        email,
+        username
+      });
+      
+      if (!updatedUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      res.json({
+        message: "Profile updated successfully",
+        user: {
+          id: updatedUser.id,
+          username: updatedUser.username,
+          email: updatedUser.email,
+          fullName: updatedUser.fullName,
+          kycLevel: updatedUser.kycLevel,
+          role: updatedUser.role
+        }
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // ===== KYC Routes =====
   apiRouter.post("/kyc", authenticate, async (req, res) => {
     try {

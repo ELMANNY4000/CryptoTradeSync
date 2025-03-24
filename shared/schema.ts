@@ -228,3 +228,41 @@ export type LiquidityPosition = typeof liquidityPositions.$inferSelect;
 
 export type InsertSwap = z.infer<typeof insertSwapSchema>;
 export type Swap = typeof swaps.$inferSelect;
+
+// User Settings
+export const userSettings = pgTable("user_settings", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  defaultCurrency: text("default_currency").default("USD").notNull(),
+  language: text("language").default("en").notNull(),
+  timeZone: text("time_zone").default("UTC").notNull(),
+  dateFormat: text("date_format").default("MM/DD/YYYY").notNull(),
+  slippageTolerance: doublePrecision("slippage_tolerance").default(0.5).notNull(),
+  autoConfirmTransactions: boolean("auto_confirm_transactions").default(true).notNull(),
+  gasPreference: text("gas_preference").default("standard").notNull(),
+  emailNotifications: boolean("email_notifications").default(true).notNull(),
+  priceAlerts: boolean("price_alerts").default(true).notNull(),
+  tradingUpdates: boolean("trading_updates").default(true).notNull(),
+  securityAlerts: boolean("security_alerts").default(true).notNull(),
+  marketingEmails: boolean("marketing_emails").default(false).notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertUserSettingsSchema = createInsertSchema(userSettings).pick({
+  userId: true,
+  defaultCurrency: true,
+  language: true,
+  timeZone: true,
+  dateFormat: true,
+  slippageTolerance: true,
+  autoConfirmTransactions: true,
+  gasPreference: true,
+  emailNotifications: true,
+  priceAlerts: true,
+  tradingUpdates: true,
+  securityAlerts: true,
+  marketingEmails: true,
+});
+
+export type InsertUserSettings = z.infer<typeof insertUserSettingsSchema>;
+export type UserSettings = typeof userSettings.$inferSelect;
