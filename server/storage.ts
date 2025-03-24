@@ -344,31 +344,50 @@ export class MemStorage implements IStorage {
 
 // Database implementation of the storage interface
 export class DatabaseStorage implements IStorage {
+  // Import needed modules at the class level
+  private db: any;
+  private drizzleOps: any;
+  
+  constructor() {
+    // We'll initialize these when first used
+    this.db = null;
+    this.drizzleOps = null;
+  }
+  
+  private async ensureImports() {
+    if (!this.db) {
+      const dbModule = await import("./db");
+      this.db = dbModule.db;
+    }
+    
+    if (!this.drizzleOps) {
+      const drizzle = await import("drizzle-orm");
+      this.drizzleOps = drizzle;
+    }
+  }
+  
   // User operations
   async getUser(id: number): Promise<User | undefined> {
-    const { eq } = await import("drizzle-orm");
-    const { db } = await import("./db");
-    const [user] = await db.select().from(users).where(eq(users.id, id));
+    await this.ensureImports();
+    const [user] = await this.db.select().from(users).where(this.drizzleOps.eq(users.id, id));
     return user || undefined;
   }
   
   async getUserByUsername(username: string): Promise<User | undefined> {
-    const { eq } = await import("drizzle-orm");
-    const { db } = await import("./db");
-    const [user] = await db.select().from(users).where(eq(users.username, username));
+    await this.ensureImports();
+    const [user] = await this.db.select().from(users).where(this.drizzleOps.eq(users.username, username));
     return user || undefined;
   }
   
   async getUserByEmail(email: string): Promise<User | undefined> {
-    const { eq } = await import("drizzle-orm");
-    const { db } = await import("./db");
-    const [user] = await db.select().from(users).where(eq(users.email, email));
+    await this.ensureImports();
+    const [user] = await this.db.select().from(users).where(this.drizzleOps.eq(users.email, email));
     return user || undefined;
   }
   
   async createUser(insertUser: InsertUser): Promise<User> {
-    const { db } = await import("./db");
-    const [user] = await db.insert(users).values({
+    await this.ensureImports();
+    const [user] = await this.db.insert(users).values({
       ...insertUser,
       kycLevel: 0,
       role: "user",
@@ -443,15 +462,14 @@ export class DatabaseStorage implements IStorage {
   }
   
   async getCryptoAssetBySymbol(symbol: string): Promise<CryptoAsset | undefined> {
-    const { eq } = await import("drizzle-orm");
-    const { db } = await import("./db");
-    const [asset] = await db.select().from(cryptoAssets).where(eq(cryptoAssets.symbol, symbol));
+    await this.ensureImports();
+    const [asset] = await this.db.select().from(cryptoAssets).where(this.drizzleOps.eq(cryptoAssets.symbol, symbol));
     return asset || undefined;
   }
   
   async createCryptoAsset(insertAsset: InsertCryptoAsset): Promise<CryptoAsset> {
-    const { db } = await import("./db");
-    const [asset] = await db.insert(cryptoAssets).values(insertAsset).returning();
+    await this.ensureImports();
+    const [asset] = await this.db.insert(cryptoAssets).values(insertAsset).returning();
     return asset;
   }
   
@@ -495,8 +513,8 @@ export class DatabaseStorage implements IStorage {
   }
   
   async createWallet(insertWallet: InsertWallet): Promise<Wallet> {
-    const { db } = await import("./db");
-    const [wallet] = await db.insert(wallets).values(insertWallet).returning();
+    await this.ensureImports();
+    const [wallet] = await this.db.insert(wallets).values(insertWallet).returning();
     return wallet;
   }
   
@@ -600,8 +618,7 @@ export class DatabaseStorage implements IStorage {
   
   // Initialize the database with sample assets if needed
   async initializeCryptoAssets() {
-    const { eq } = await import("drizzle-orm");
-    const { db } = await import("./db");
+    await this.ensureImports();
     
     const assets = [
       {
@@ -648,8 +665,8 @@ export class DatabaseStorage implements IStorage {
     
     for (const asset of assets) {
       // Check if the asset already exists
-      const [existingAsset] = await db.select().from(cryptoAssets)
-        .where(eq(cryptoAssets.symbol, asset.symbol));
+      const [existingAsset] = await this.db.select().from(cryptoAssets)
+        .where(this.drizzleOps.eq(cryptoAssets.symbol, asset.symbol));
       
       if (!existingAsset) {
         await this.createCryptoAsset(asset);

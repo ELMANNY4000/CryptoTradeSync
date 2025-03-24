@@ -1,6 +1,26 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { testConnection } from "./db";
+import { storage } from "./storage";
+
+// Test the database connection
+testConnection().then(connected => {
+  if (connected) {
+    console.log("Database connection successful");
+    
+    // Initialize database with crypto assets if needed
+    if ('initializeCryptoAssets' in storage) {
+      (storage as any).initializeCryptoAssets()
+        .then(() => console.log("Initialized crypto assets in database"))
+        .catch(error => console.error("Failed to initialize crypto assets:", error));
+    }
+  } else {
+    console.error("Database connection failed");
+  }
+}).catch(error => {
+  console.error("Error testing database connection:", error);
+});
 
 const app = express();
 app.use(express.json());

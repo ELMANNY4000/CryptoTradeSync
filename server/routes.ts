@@ -514,6 +514,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // For market orders, execute immediately
       if (orderData.orderType === "market") {
+        // Check if we have current price data
+        if (asset.currentPrice === null) {
+          return res.status(400).json({ message: "Current price data unavailable for this asset" });
+        }
+        
         // Create transaction for market order
         const transaction = await storage.createTransaction({
           userId: req.user!.id,
@@ -632,7 +637,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ===== Admin Routes =====
   apiRouter.get("/admin/users", authenticate, isAdmin, async (req, res) => {
     try {
-      // Query all users from the database
+      // Get all users using storage interface for consistency
       const { db } = await import("./db");
       const allUsers = await db.select().from(users);
       
@@ -659,15 +664,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Query pending KYC requests
       const { db } = await import("./db");
       const { eq } = await import("drizzle-orm");
-      const kycRequests = await db.select().from(kycInfo)
+      const pendingKycRequests = await db.select().from(kycInfo)
         .where(eq(kycInfo.verificationStatus, "pending"));
       
       // Enrich with user info
       const enrichedRequests = await Promise.all(
-        kycRequests.map(async (kyc) => {
-          const user = await storage.getUser(kyc.userId);
+        pendingKycRequests.map(async (kycRecord: KycInfo) => {
+          const user = await storage.getUser(kycRecord.userId);
           return {
-            ...kyc,
+            ...kycRecord,
             user: user ? {
               id: user.id,
               username: user.username,
